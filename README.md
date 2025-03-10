@@ -27,4 +27,4 @@ npm run start
 npm run server
 ```
 
-### Still under development! 🚀
+### Authentication & Authorization DONE! 🚀

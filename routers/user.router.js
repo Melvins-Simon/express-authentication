@@ -8,17 +8,18 @@ import {
   forgotPasswd,
   delUser,
 } from "../controllers/user.controller.js";
+import checkAuth from "../middlewares/verifyJwt.js";
 
 const router = express.Router();
 
+//Unrestricted routes
 router.post("/auth/signup", signup);
 router.post("/auth/signin", signin);
 router.post("/auth/verify-email", verifyEmail);
-router.post("/auth/signout", signout);
-//Authenticated middleware
-router.post("/auth/forgot-password", forgotPasswd);
-router.post("/auth/reset-password/:id", resetPasswd);
-//delete
-router.delete("/auth/delete/user/:id", delUser);
+//Restricted routes
+router.post("/auth/signout", checkAuth, signout);
+router.post("/auth/forgot-password", checkAuth, forgotPasswd);
+router.post("/auth/reset-password/:id", checkAuth, resetPasswd);
+router.delete("/auth/delete/user/:id", checkAuth, delUser);
 
 export default router;

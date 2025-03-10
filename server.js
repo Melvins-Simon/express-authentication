@@ -2,6 +2,7 @@ import express from "express";
 import "dotenv/config";
 import conDb from "./db/connDb.js";
 import authRouter from "./routers/user.router.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use((error, req, res, next) => {
 });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 app.listen(process.env.PORT || 3000, (next) => {
   conDb(next);

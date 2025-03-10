@@ -28,7 +28,6 @@ const userSchema = new mongoose.Schema(
     },
     verificationCodeExpTime: {
       type: Date,
-      default: Date.now(),
     },
     forgotPasswdToken: {
       type: String,
@@ -36,7 +35,6 @@ const userSchema = new mongoose.Schema(
     },
     forgotPasswdTokenExpTime: {
       type: Date,
-      default: Date.now(),
     },
   },
   { timestamps: true }

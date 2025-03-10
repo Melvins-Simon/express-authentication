@@ -1,8 +1,15 @@
 import { User } from "../models/user.model.js";
-import { sendVerificationCode, sendWelcomeEmail } from "../utils/emails.js";
+import {
+  sendResetLink,
+  sendResetSuccess,
+  sendVerificationCode,
+  sendWelcomeEmail,
+} from "../utils/emails.js";
+import { genForgotPasswdToken } from "../utils/generateForgotPasswordToken.js";
 import { genVCode } from "../utils/genVC.js";
 import { comparePasswd, hashPasswd } from "../utils/hashing.js";
 import { generateJwtAsetCookie } from "../utils/jwtoken.js";
+import { splitName } from "../utils/returnFName.js";
 
 // signup
 export const signup = async (req, res, next) => {
@@ -15,10 +22,26 @@ export const signup = async (req, res, next) => {
     }
     const userExist = await User.findOne({ email });
 
-    if (userExist) {
+    if (userExist && userExist.isVerified) {
       return res.status(400).json({
         success: false,
         message: "User with the same email already exist.",
+      });
+    } else if (userExist && !userExist.isVerified) {
+      const newVCode = genVCode();
+      const newExpTime = Date.now() + 30 * 60 * 1000;
+      userExist.verificationCode = newVCode;
+      userExist.verificationCodeExpTime = newExpTime;
+      const user = await userExist.save();
+
+      sendVerificationCode(
+        user.verificationCode,
+        user.email,
+        splitName(user.username)
+      );
+      return res.status(200).json({
+        success: true,
+        message: "New verification code sent.",
       });
     }
     if (password !== confirmPassword) {
@@ -45,11 +68,10 @@ export const signup = async (req, res, next) => {
       verificationCodeExpTime,
     });
     const user = await newUser.save();
-    sendVerificationCode(verificationCode, email, username);
+    sendVerificationCode(verificationCode, email, splitName(user.username));
     res.status(201).json({
       success: true,
-      message: "User registration success.",
-      data: { ...user._doc, password: undefined, verificationCode: undefined },
+      message: "Verification code sent.",
     });
   } catch (error) {
     return res.status(500).json({
@@ -142,11 +164,46 @@ export const verifyEmail = async (req, res, next) => {
     verifyUser.verificationCodeExpTime = undefined;
     const user = await verifyUser.save();
     generateJwtAsetCookie(user._id, res);
-    sendWelcomeEmail(user.username, user.email);
+    sendWelcomeEmail(splitName(user.username), user.email);
     res.status(200).json({
       success: true,
-      message: "User verification success.",
+      message: "User registration and verification success.",
       data: { ...user._doc, password: undefined },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `Internal server error -> ${error.message}`,
+    });
+  }
+};
+
+// Forgot password
+export const forgotPasswd = async (req, res, next) => {
+  const { email } = req.body;
+  try {
+    const userExist = await User.findOne({ email }).select(
+      "+forgotPasswdToken"
+    );
+    if (!userExist) {
+      return res.status(404).json({
+        success: false,
+        message: "User with the email provided not found.",
+      });
+    }
+    const forgotPasswdToken = genForgotPasswdToken();
+    const forgotPasswdTokenExpTime = Date.now() + 30 * 60 * 1000;
+    userExist.forgotPasswdToken = forgotPasswdToken;
+    userExist.forgotPasswdTokenExpTime = forgotPasswdTokenExpTime;
+    const user = await userExist.save();
+    sendResetLink(
+      splitName(userExist.username),
+      user.email,
+      user.forgotPasswdToken
+    );
+    res.status(200).json({
+      success: true,
+      message: "Password reset link sent to email successfully.",
     });
   } catch (error) {
     res.status(500).json({
@@ -159,18 +216,50 @@ export const verifyEmail = async (req, res, next) => {
 // Reset password
 export const resetPasswd = async (req, res, next) => {
   try {
-    //todo
-  } catch (error) {
-    //todo
-  }
-};
+    const { newPassword, confirmNewPassword } = req.body;
+    const { id } = req.params;
+    if (!newPassword || !confirmNewPassword || !id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Provide all the required details." });
+    }
+    if (newPassword.length < 6 || confirmNewPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password length should be at least six characters.",
+      });
+    }
+    if (newPassword !== confirmNewPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: `There's a password mismatch` });
+    }
+    const userExist = await User.findOne({
+      forgotPasswdToken: id,
+      forgotPasswdTokenExpTime: { $gt: Date.now() },
+    })
+      .select("+forgotPasswdToken")
+      .select("+password");
 
-// Reset password
-export const forgotPasswd = async (req, res, next) => {
-  try {
-    //todo
+    if (!userExist) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or exipired verification link.",
+      });
+    }
+    userExist.password = await hashPasswd(newPassword, 12);
+    userExist.forgotPasswdToken = undefined;
+    userExist.forgotPasswdTokenExpTime = undefined;
+    const user = await userExist.save();
+    sendResetSuccess(splitName(userExist.username), user.email);
+    res
+      .status(200)
+      .json({ success: false, message: "Email reset was successful." });
   } catch (error) {
-    //todo
+    res.status(500).json({
+      success: false,
+      message: `Internal server error -> ${error.message}`,
+    });
   }
 };
 

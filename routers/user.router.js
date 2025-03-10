@@ -17,7 +17,7 @@ router.post("/auth/verify-email", verifyEmail);
 router.post("/auth/signout", signout);
 //Authenticated middleware
 router.post("/auth/forgot-password", forgotPasswd);
-router.post("/auth/rest-password", resetPasswd);
+router.post("/auth/reset-password/:id", resetPasswd);
 //delete
 router.delete("/auth/delete/user/:id", delUser);
 
